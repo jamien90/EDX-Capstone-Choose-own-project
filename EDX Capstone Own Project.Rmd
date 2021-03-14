@@ -1,0 +1,307 @@
+---
+title: "Deploying Machine Learning Techniques to identify Liver Patients"
+author: "Jamien Lim"
+date: "12/3/2021"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(caret)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+```
+
+# Introduction
+
+Liver disease one of the most common cause of premature death in UK and accounts for approximately 2 million deaths per year worldwide. One of the reason is due to late diagnosis of liver disease, when intervention becomes less effective. Moreover, the complexity of liver disease makes it challenging to be detected early. In recent years, contribution of early diagnosis to avoidable morbidity and mortality has been recognised and more focus has been garnered. Even though liver disease is now promoted as a priority by various healthcare groups, but the challenge in detecting it early and accurately still remains. Therefore, this is a motivation to develop a novel approach in aiding human diagnosis with regards to the detection of liver patients. 
+
+With that in mind, the aim of this project is to investigate if incorporating machine learning (ML) technique will aid the blood test results in identifying patients that are similar to patients receiving care from hepatologist. The hypothesis of this projects will be that the combination of both ML and blood test results will benefit healthcare groups in identifying liver patients efficiently and effectively.
+
+In this project, the ```Indian Liver Patient Dataset``` from ```UCI Machine Learning Repository``` will be used to develop the model. The dataset includes blood test results from both liver patients and control group, thereby allowing us to compare and derive a model from it. Firstly, dataset of interest will be explored and fomartted. Next, some ML methods are performed to develop the appropriate model for this project. Lastly, these results will then be compared to derive the prediction model for the aim of this project.
+
+# Methodology
+
+## Data Exploration
+
+### Downloading of data
+
+The data is first downloaded from UCI Repository and formatted into a data frame with its column defined accordingly to the dataset information provided.
+
+```{r Downloading of data}
+colnames <-    c('age', # Age of the patient 
+                 'sex', # Sex of the patient 
+                 'tb', # Total Bilirubin
+                 'db', # Direct Bilirubin 
+                 'alkphos', # Alkaline Phosphotase
+                 'sgpt', # Alamine Aminotransferase
+                 'sgot', # Aspartate Aminotransferase
+                 'tp', # Total Protiens
+                 'alb', # Albumin
+                 'ag', # Ratio	Albumin and Globulin Ratio 
+                 'outcome') # Selector field used to split the data into two sets
+
+data <- read.table("https://archive.ics.uci.edu/ml/machine-learning-databases/00225/Indian%20Liver%20Patient%20Dataset%20(ILPD).csv",
+                       sep=',',
+                       header=FALSE,
+                       col.names=colnames)
+
+data <- subset(data, complete.cases(data))
+data <- data %>% 
+  mutate(outcome = as.character(outcome)) %>% 
+  mutate(outcome = replace(outcome, outcome == '1', 'Disease')) %>%
+  mutate(outcome = replace(outcome, outcome == '2', 'Normal')) %>%
+  mutate(outcome = as.factor(outcome))
+
+head(data)
+```
+
+### Splitting dataset into train and test sets
+
+After importing the data into Rstudio, the data is splitted into training and test sets before proceeding further into data exploration. In addition, the approximate proportion of the outcome column is preserved. 
+
+```{r Splitting of data}
+set.seed(1)
+train_index <- createDataPartition(data$outcome, p=.7, list=FALSE)
+train <- data[train_index,]
+test <- data[-train_index,]
+```
+
+### Exploration of data
+
+#### Age
+
+```{r Age}
+train %>% 
+  ggplot(aes(x = age)) + 
+    geom_histogram(binwidth = 10) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+From the graph plotted above, both groups are observed to have a similar distribution in terms of ```age```.
+
+#### Sex
+
+```{r Sex}
+train %>% 
+  ggplot(aes(x = sex)) + 
+    geom_bar() + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+From the ```sex``` graph, female is observed to have a lower counts in both groups as compared to male, with a larger difference in the ```Disease``` group. This large difference could be due to the general lifestyle of male as compared to female, which causes the higher incidences in male. On the other hand, it seems that distribution of ```Normal``` group is constructed in the same way as ```Disease``` group.
+
+#### Bilirubin
+
+Bilirubin is produced as a byproduct from the breakdown of heme, which occurs naturally in the blood. In the data, two types of bilirubin is reported:
+
+* ```Total bilirubin (tb)``` represents both conjugated and unconjugated bilirubin 
+  present in the sample.
+  
+* ```Direct bilirubin (db)``` represents the water-soluble bilirubin that is present
+  in the blood sample which reacts with the reagents. 
+  
+```{r tb}
+train %>% 
+  ggplot(aes(x = tb)) + 
+    geom_histogram(binwidth = 3) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+The ```tb``` graph above shows the distribution of total bilirubin levels in both groups. It is important to note the wider distribution observed in ```Disease``` as compared to the ```Normal```. However, this is not a good indicator alone as majority of the counts are generally in the 0 to 10 ```tb``` level range.
+
+```{r db}
+train %>% 
+  ggplot(aes(x = db)) + 
+    geom_histogram(binwidth = 1) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+Similarly, it is observed that ```db``` has the same distribution pattern as ```tb```, thus indicating that it is not a good indicator alone as well.
+
+#### Alkaline Phosphotase
+
+```Alkaline Phosphotase (alkphos)``` is an enzyme that removes phosphate groups from organic compounds.
+
+```{r alkphos}
+train %>% 
+  ggplot(aes(x = alkphos)) + 
+    geom_histogram(binwidth = 100) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+#### Alanine Aminotransferase
+
+```Alanine Aminotransferase (sgpt)``` is the enzyme responsible for the transfer of amino groups from L-alanine to alpha-ketoglutarate.
+
+```{r sgpt}
+train %>% 
+  ggplot(aes(x = sgpt)) + 
+    geom_histogram(binwidth = 100) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+#### Aspartate Aminotransferase
+
+```Aspartate Aminotransferase (sgot)``` is the enzyme that is involved in the transfer of amino groups from aspartic acid to alpha-ketoglutaric acid.
+
+```{r sgot}
+train %>% 
+  ggplot(aes(x = sgot)) + 
+    geom_histogram(binwidth = 100) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+It is observed that the levels of all the enzymes displayed a similar distribution pattern as bilirubin, where wider range is observed in ```Disease``` as compared to the control. Similarly, majority of the counts still reside in the narrow range of values.
+
+#### Total Protein
+
+The ```Total Protein (tp)``` level is measured in both groups as well in search for a correlation to the liver disease.
+
+```{r tp}
+train %>% 
+  ggplot(aes(x = tp)) + 
+    geom_histogram(binwidth = 1) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+The total protein level is observed to be similar between the two groups.
+
+
+#### Albumin
+
+Besides total protein, ```Albumin (alb)``` level is also measured for both groups.
+
+```{r alb}
+train %>% 
+  ggplot(aes(x = alb)) + 
+    geom_histogram(binwidth = 0.5) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+Once again, albumin levels appear mostly similar for both groups.
+
+#### Albumin/ Globulin Ratio
+
+The final data to explore into will be the ratio between albumin and globulin. 
+
+```{r ag}
+train %>% 
+  ggplot(aes(x = ag)) + 
+    geom_histogram(binwidth = 0.3) + 
+    theme_bw() +
+    facet_grid(~ outcome)
+```
+
+In the graph above, similar distribution is observed for both groups, with a wider range of distribution observed for ```Disease```.
+
+### Correlation of Predictors
+
+Next, it is evident that some predictors may be correlated which suggest a possible relationship between the predictors and may aid in the development of the model. Therefore it is important to look into the correlation of predictors as shown below. 
+
+```{r Correlation of Predictors}
+cor(subset(train, select = -c(sex, outcome)))
+```
+
+Highly correlated predictors were identified during this process, in preparation for the development of prediction models. Moreover, threshold of >0.75 is applied for the list of predictors to avoid 'closely related' variables, thus removing three variables as shown in the following code. 
+
+```{r Formatting of data}
+train <- train %>% subset(select = -c(db, sgpt, alb))
+test <- test %>% subset(select = -c(db, sgpt, alb))
+```
+
+## Machine Learning Models
+
+Correlations were found for some predictors, enabling machine learning models to be developed. Following code is set up to collate the results for better representation in this report. Subsequently, a few models were constructed to determine the most appropriate prediction model for this project.
+
+```{r Results}
+results <- data.frame(Model = character(), 
+                      Accuracy = double(), 
+                      stringsAsFactors = FALSE)
+```
+
+### K-Nearest Neighbours
+
+One of the most common classification model is the K-Nearest Neighbours model. The k-nearest matching points from will be evaluated the training data, where the predicted outcome is derived from the average evaluated result. The patients with similar medical profiles will result in them producing the same predicted outcome.
+
+```{r knn-train, info=FALSE, warning=FALSE}
+knn = train(outcome ~ ., data = train, method = "knn", preProcess=c('knnImpute'))
+knn
+```
+
+The value of K is first evaluated to determine the optimal input value to produce the most appropriate prediction model.
+
+```{r knn model}
+pred = predict(knn, newdata = test)
+confusionMatrix <- confusionMatrix(pred, test$outcome, prevalence = 0.06)
+results[nrow(results) + 1, ] <- c(as.character('K-nearest neighbours (knn)'), 
+                                  confusionMatrix$overall['Accuracy'])
+confusionMatrix
+
+results %>% knitr::kable()
+```
+
+As shown from the code above, the accuracy of this model is too low to be used as a prediction model for the aim of this project.
+
+### Linear Classifier
+
+The next model to investigate is linear classifier. ```glmboost``` is applied in this case to achieve a better fit.
+
+```{r linc-train, info=FALSE, warning=FALSE}
+lc = train(outcome ~ ., data = train, method = "glmboost")
+pred = predict(lc, newdata = test)
+confusionMatrix <- confusionMatrix(pred, test$outcome)
+results[nrow(results) + 1, ] <- c(as.character('Linear Classifier (glmboost)'), 
+                                  confusionMatrix$overall['Accuracy'])
+confusionMatrix
+
+results %>% knitr::kable()
+```
+
+The accuracy of prediction is improved with this model. However, almost the whole ```Normal``` group is considered positive in this model, thus making this model unsuitable as a prediction model.
+
+### Logistic Regression
+
+Another common model to investigate will be logistic regression. ```bayesglm``` is applied in this model for better fit.
+
+```{r lr-train, info=FALSE, warning=FALSE}
+lr = train(outcome ~ ., data = train, method = "bayesglm")
+pred = predict(lr, newdata = test)
+confusionMatrix <- confusionMatrix(pred, test$outcome)
+results[nrow(results) + 1, ] <- c(as.character('Logistic Regression (bayesglm)'), 
+                                  confusionMatrix$overall['Accuracy'])
+confusionMatrix
+
+results %>% knitr::kable()
+```
+
+Further improvement is seen through this model, however, the accuracy of the model is still not robust enough to be used as an appropriate prediction model for this project.
+
+# Results
+
+The results from all the models are compiled in the following code.
+
+```{r Results Compilation}
+results %>% arrange(Accuracy) %>% knitr::kable()
+```
+
+A few models were performed in this project and it is important to note that even though models like Linear Classifier have higher accuracy, but the high sensitivity and low specificity of the model caused it to be an inappropriate model. On the other hand, models like K-Nearest Neighbours model have a better sensitivity and specificity as compared to Linear Classifier. However, the accuracy of the model is a concern, thus unsuitable to be used as a prediction model.
+
+# Conclusion
+
+In conclusion, the models that are investigated in this project are not appropriate to be utilized as a prediction model for the aim of this project. However, should there be a larger dataset, K-Nearest Neighbours model's accuracy may be further improved, which may establish it to be an appropriate prediction model. With that in mind, more data has to be acquired before establishing a prediction model for the aim of this project.
